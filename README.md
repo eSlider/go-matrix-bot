@@ -2,18 +2,194 @@
 
 Go library for building [Matrix](https://matrix.org/) bots with end-to-end encryption support, built on top of [mautrix-go](https://github.com/mautrix/go).
 
-Pairs with [go-ollama](https://github.com/eSlider/go-ollama) to build AI-powered chat assistants.
+Integrates with [go-ollama](https://github.com/eSlider/go-ollama), [go-onlyoffice](https://github.com/eSlider/go-onlyoffice), and [go-gitea-helpers](https://github.com/eSlider/go-gitea-helpers) for AI-powered project management in chat.
 
-## Features
+## Architecture
 
-- Simple, handler-based bot API — register functions, not interfaces
-- End-to-end encryption out of the box (via mautrix crypto helper)
-- Auto-join rooms on invite
-- Send plain text, HTML, and markdown-formatted messages
-- Mention users in replies
-- Markdown-to-HTML conversion built in
-- Graceful shutdown with context cancellation
-- Works with [go-ollama](https://github.com/eSlider/go-ollama) for AI responses
+```mermaid
+graph TB
+    subgraph "Matrix Chat"
+        U["👤 User"]
+        R["💬 Matrix Room"]
+    end
+
+    subgraph "go-matrix-bot"
+        B["🤖 Bot Engine"]
+        H["📨 Message Handlers"]
+        MD["📝 Markdown → HTML"]
+        E2E["🔒 E2E Encryption"]
+    end
+
+    subgraph "Integrations"
+        AI["🧠 go-ollama<br/>LLM / AI"]
+        GIT["📦 go-gitea-helpers<br/>Git Repos & Issues"]
+        OO["📋 go-onlyoffice<br/>Projects & Tasks"]
+    end
+
+    U -->|"sends message"| R
+    R -->|"event"| B
+    B --> H
+    H -->|"query"| AI
+    H -->|"fetch/create"| GIT
+    H -->|"fetch/create"| OO
+    AI -->|"AI response"| H
+    GIT -->|"repos, issues"| H
+    OO -->|"projects, tasks"| H
+    H -->|"formatted reply"| MD
+    MD --> E2E
+    E2E -->|"encrypted message"| R
+    R -->|"displays"| U
+```
+
+## Integration Patterns
+
+### Pattern 1 — Echo / Utility Bot
+
+Simple request-response with no external services.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Matrix
+    participant Bot
+
+    User->>Matrix: !ping
+    Matrix->>Bot: event
+    Bot->>Matrix: "pong!"
+    Matrix->>User: pong!
+```
+
+### Pattern 2 — AI Assistant (Ollama)
+
+User asks a question, bot streams the answer from an LLM.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Matrix
+    participant Bot
+    participant Ollama
+
+    User->>Matrix: ::explain Go channels
+    Matrix->>Bot: event
+    Bot->>Ollama: POST /api/generate
+    Ollama-->>Bot: streaming tokens...
+    Bot->>Bot: join tokens → markdown → HTML
+    Bot->>Matrix: formatted reply @User
+    Matrix->>User: rich AI response
+```
+
+### Pattern 3 — Gitea Issue Tracker
+
+Query repositories and issues from chat.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Matrix
+    participant Bot
+    participant Gitea
+
+    User->>Matrix: !issues backend-api
+    Matrix->>Bot: event
+    Bot->>Gitea: GET /repos/{owner}/backend-api/issues (paginated)
+    Gitea-->>Bot: issues list
+    Bot->>Bot: format as markdown table
+    Bot->>Matrix: issue list @User
+    Matrix->>User: formatted issue list
+```
+
+### Pattern 4 — OnlyOffice Project Management
+
+Manage projects and tasks from chat.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Matrix
+    participant Bot
+    participant OnlyOffice
+
+    User->>Matrix: !create-task DevOps | Deploy v2 | Upgrade k8s cluster
+    Matrix->>Bot: event
+    Bot->>OnlyOffice: GET /api/2.0/project/filter.json
+    OnlyOffice-->>Bot: projects list
+    Bot->>Bot: find "DevOps" project
+    Bot->>OnlyOffice: POST /api/2.0/project/{id}/task.json
+    OnlyOffice-->>Bot: created task
+    Bot->>Matrix: "Task created: Deploy v2 (ID: 42)"
+    Matrix->>User: confirmation
+```
+
+### Pattern 5 — AI + Gitea (Smart Summarizer)
+
+Combines Gitea data with AI analysis.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Matrix
+    participant Bot
+    participant Gitea
+    participant Ollama
+
+    User->>Matrix: !summarize frontend-app
+    Matrix->>Bot: event
+    Bot->>Gitea: GET issues (all pages)
+    Gitea-->>Bot: 47 open issues
+    Bot->>Bot: build issue list text
+    Bot->>Ollama: "Summarize these 47 issues, group by theme..."
+    Ollama-->>Bot: AI analysis
+    Bot->>Matrix: themed summary with priorities @User
+    Matrix->>User: AI-powered project report
+```
+
+### Pattern 6 — Full Integration (All Services)
+
+The complete project management flow.
+
+```mermaid
+graph LR
+    subgraph "Chat Input"
+        A["!summarize repo"]
+        B["!create-task ..."]
+        C["!ai question"]
+        D["!issues repo"]
+        E["!projects"]
+    end
+
+    subgraph "Bot Routing"
+        R{{"Command Router"}}
+    end
+
+    subgraph "Services"
+        AI["Ollama AI"]
+        GIT["Gitea"]
+        OO["OnlyOffice"]
+    end
+
+    subgraph "Chat Output"
+        O["Formatted Reply"]
+    end
+
+    A --> R
+    B --> R
+    C --> R
+    D --> R
+    E --> R
+
+    R -->|"AI query"| AI
+    R -->|"repos/issues"| GIT
+    R -->|"projects/tasks"| OO
+    R -->|"fetch + AI"| GIT
+    GIT -.->|"issue data"| AI
+
+    AI --> O
+    GIT --> O
+    OO --> O
+```
+
+---
 
 ## Installation
 
@@ -21,10 +197,12 @@ Pairs with [go-ollama](https://github.com/eSlider/go-ollama) to build AI-powered
 go get github.com/eslider/go-matrix-bot
 ```
 
-For AI features (optional):
+Optional integrations:
 
 ```bash
-go get github.com/eslider/go-ollama
+go get github.com/eslider/go-ollama           # AI responses
+go get github.com/eslider/go-onlyoffice        # Project management
+go get github.com/eslider/go-gitea-helpers      # Git issue tracking
 ```
 
 **System dependency** (required for encryption):
@@ -40,209 +218,88 @@ sudo apt-get install libolm-dev
 
 ### 1. Echo Bot
 
-The simplest possible bot — replies with whatever you send it:
-
 ```go
-package main
+bot, _ := matrix.NewBot(matrix.GetEnvironmentConfig())
 
-import (
-    "context"
-    "fmt"
-    "os"
-    "os/signal"
-
-    matrix "github.com/eslider/go-matrix-bot"
-    "maunium.net/go/mautrix/event"
-    "maunium.net/go/mautrix/id"
-)
-
-func main() {
-    bot, _ := matrix.NewBot(matrix.GetEnvironmentConfig())
-
-    bot.OnMessage(func(ctx context.Context, roomID id.RoomID, sender id.UserID, msg *event.MessageEventContent) {
-        bot.SendText(ctx, roomID, "Echo: "+msg.Body)
-    })
-
-    ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-    defer cancel()
-
-    go bot.Run(ctx)
-    <-ctx.Done()
-    bot.Stop()
-}
-```
-
-### 2. AI Assistant (with Ollama)
-
-A bot that forwards user messages to an Ollama LLM and returns formatted responses:
-
-```go
-package main
-
-import (
-    "context"
-    "os"
-    "os/signal"
-    "strings"
-
-    matrix "github.com/eslider/go-matrix-bot"
-    ollama "github.com/eslider/go-ollama"
-    "maunium.net/go/mautrix/event"
-    "maunium.net/go/mautrix/id"
-)
-
-func main() {
-    bot, _ := matrix.NewBot(matrix.GetEnvironmentConfig())
-
-    ai := ollama.NewOpenWebUiClient(&ollama.DSN{
-        URL:   os.Getenv("OPEN_WEB_API_GENERATE_URL"),
-        Token: os.Getenv("OPEN_WEB_API_TOKEN"),
-    })
-
-    bot.OnMessage(func(ctx context.Context, roomID id.RoomID, sender id.UserID, msg *event.MessageEventContent) {
-        if !strings.HasPrefix(msg.Body, "::") {
-            return
-        }
-
-        prompt := msg.Body[2:]
-        var chunks []string
-
-        ai.Query(ollama.Request{
-            Model:  "llama3.2:3b",
-            Prompt: prompt,
-            Options: &ollama.RequestOptions{
-                Temperature: ollama.Float(0.7),
-            },
-            OnJson: func(res ollama.Response) error {
-                if res.Response != nil {
-                    chunks = append(chunks, *res.Response)
-                }
-                return nil
-            },
-        })
-
-        response := strings.Join(chunks, "")
-        html := matrix.MarkdownToHTML(response)
-        bot.SendReply(ctx, roomID, response, html, sender)
-    })
-
-    ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-    defer cancel()
-    go bot.Run(ctx)
-    <-ctx.Done()
-    bot.Stop()
-}
-```
-
-### 3. Command Bot (Multi-Command)
-
-A bot with multiple commands like `!help`, `!ping`, `!time`, `!ai`:
-
-```go
 bot.OnMessage(func(ctx context.Context, roomID id.RoomID, sender id.UserID, msg *event.MessageEventContent) {
-    switch {
-    case msg.Body == "!ping":
-        bot.SendText(ctx, roomID, "pong!")
-
-    case msg.Body == "!time":
-        bot.SendText(ctx, roomID, time.Now().Format(time.RFC3339))
-
-    case strings.HasPrefix(msg.Body, "!ai "):
-        prompt := strings.TrimPrefix(msg.Body, "!ai ")
-        // ... query Ollama and send response
-    }
+    bot.SendText(ctx, roomID, "Echo: "+msg.Body)
 })
+
+ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+defer cancel()
+go bot.Run(ctx)
+<-ctx.Done()
+bot.Stop()
 ```
 
-See the full [commandbot example](examples/commandbot/main.go) for a complete implementation with help text and code extraction.
-
----
-
-## Use Cases
-
-### Chat-Ops / DevOps Notifications
+### 2. AI Assistant
 
 ```go
-// Send deployment notifications to a Matrix room
-bot.SendHTML(ctx, opsRoom,
-    "Deploy complete: v1.2.3",
-    matrix.MarkdownToHTML("**Deploy complete:** `v1.2.3` to production"),
-)
-```
+ai := ollama.NewOpenWebUiClient(&ollama.DSN{
+    URL:   os.Getenv("OPEN_WEB_API_GENERATE_URL"),
+    Token: os.Getenv("OPEN_WEB_API_TOKEN"),
+})
 
-### AI Code Review Assistant
-
-```go
 bot.OnMessage(func(ctx context.Context, roomID id.RoomID, sender id.UserID, msg *event.MessageEventContent) {
-    if !strings.HasPrefix(msg.Body, "!review ") {
-        return
-    }
+    if !strings.HasPrefix(msg.Body, "::") { return }
 
-    code := strings.TrimPrefix(msg.Body, "!review ")
     var chunks []string
-
     ai.Query(ollama.Request{
-        Model:  "llama3.2:3b",
-        Prompt: "Review this code for bugs, security issues, and improvements:\n\n" + code,
-        Options: &ollama.RequestOptions{Temperature: ollama.Float(0.3)},
+        Model: "llama3.2:3b", Prompt: msg.Body[2:],
         OnJson: func(res ollama.Response) error {
-            if res.Response != nil {
-                chunks = append(chunks, *res.Response)
-            }
-            return nil
+            chunks = append(chunks, *res.Response); return nil
         },
     })
 
-    review := strings.Join(chunks, "")
-    bot.SendReply(ctx, roomID, review, matrix.MarkdownToHTML(review), sender)
+    md := strings.Join(chunks, "")
+    bot.SendReply(ctx, roomID, md, matrix.MarkdownToHTML(md), sender)
 })
 ```
 
-### Monitoring Alert Bot
+### 3. Gitea Issue Viewer
 
 ```go
-// Run a periodic health check and report to Matrix
-go func() {
-    ticker := time.NewTicker(5 * time.Minute)
-    for range ticker.C {
-        resp, err := http.Get("https://api.example.com/health")
-        if err != nil || resp.StatusCode != 200 {
-            bot.SendHTML(ctx, alertRoom,
-                "ALERT: API is down!",
-                matrix.MarkdownToHTML("**ALERT:** API health check failed"),
-            )
-        }
+git, _ := gitea.NewClient(gitea.GetEnvironmentConfig())
+
+bot.OnMessage(func(ctx context.Context, roomID id.RoomID, sender id.UserID, msg *event.MessageEventContent) {
+    if !strings.HasPrefix(msg.Body, "!issues ") { return }
+
+    repo := strings.TrimPrefix(msg.Body, "!issues ")
+    issues, _ := git.GetAllIssues("my-org", repo)
+
+    var sb strings.Builder
+    sb.WriteString(fmt.Sprintf("**%s** — %d issues:\n", repo, len(issues)))
+    for _, iss := range issues {
+        sb.WriteString(fmt.Sprintf("- #%d %s\n", iss.Index, iss.Title))
     }
-}()
+
+    md := sb.String()
+    bot.SendReply(ctx, roomID, md, matrix.MarkdownToHTML(md), sender)
+})
 ```
 
-### AI Translation Bot
+### 4. OnlyOffice Task Creator
 
 ```go
+oo := onlyoffice.NewClient(onlyoffice.GetEnvironmentCredentials())
+
 bot.OnMessage(func(ctx context.Context, roomID id.RoomID, sender id.UserID, msg *event.MessageEventContent) {
-    if !strings.HasPrefix(msg.Body, "!translate ") {
-        return
-    }
+    if !strings.HasPrefix(msg.Body, "!task ") { return }
 
-    text := strings.TrimPrefix(msg.Body, "!translate ")
-    var chunks []string
-
-    ai.Query(ollama.Request{
-        Model:  "llama3.2:3b",
-        Prompt: "Translate the following text to English. Only output the translation:\n\n" + text,
-        Options: &ollama.RequestOptions{Temperature: ollama.Float(0.1)},
-        OnJson: func(res ollama.Response) error {
-            if res.Response != nil {
-                chunks = append(chunks, *res.Response)
-            }
-            return nil
-        },
+    title := strings.TrimPrefix(msg.Body, "!task ")
+    projects, _ := oo.GetProjects()
+    task, _ := oo.CreateProjectTask(onlyoffice.NewProjectTaskRequest{
+        ProjectId: *projects[0].ID,
+        Title:     title,
     })
 
-    translation := strings.Join(chunks, "")
-    bot.SendReply(ctx, roomID, translation, matrix.MarkdownToHTML(translation), sender)
+    bot.SendText(ctx, roomID, fmt.Sprintf("Created: %s (ID: %d)", *task.Title, *task.ID))
 })
 ```
+
+### 5. Full Project Manager
+
+See the complete [project-manager example](examples/project-manager/main.go) integrating all 4 services with commands: `!help`, `!repos`, `!issues`, `!projects`, `!tasks`, `!create-task`, `!summarize`, `!ai`.
 
 ---
 
@@ -250,21 +307,15 @@ bot.OnMessage(func(ctx context.Context, roomID id.RoomID, sender id.UserID, msg 
 
 ### Types
 
-#### `Config`
-
 ```go
 type Config struct {
-    Homeserver string // Matrix homeserver URL (e.g. "https://matrix.org")
-    Username   string // Bot username (localpart, e.g. "mybot")
-    Password   string // Bot password
-    Database   string // SQLite database path for crypto state (default: "matrix-bot.db")
-    Debug      bool   // Enable debug logging
+    Homeserver string   // Matrix homeserver URL
+    Username   string   // Bot username (localpart)
+    Password   string   // Bot password
+    Database   string   // SQLite database path (default: "matrix-bot.db")
+    Debug      bool     // Enable debug logging
 }
-```
 
-#### `MessageHandler`
-
-```go
 type MessageHandler func(ctx context.Context, roomID id.RoomID, sender id.UserID, message *event.MessageEventContent)
 ```
 
@@ -272,9 +323,9 @@ type MessageHandler func(ctx context.Context, roomID id.RoomID, sender id.UserID
 
 | Function | Description |
 |---|---|
-| `NewBot(config Config)` | Create a new bot instance |
+| `NewBot(config)` | Create a new bot instance |
 | `GetEnvironmentConfig()` | Load config from `MATRIX_API_*` env vars |
-| `MarkdownToHTML(md string)` | Convert markdown to HTML for rich messages |
+| `MarkdownToHTML(md)` | Convert markdown to HTML for rich messages |
 
 ### Bot Methods
 
@@ -282,38 +333,47 @@ type MessageHandler func(ctx context.Context, roomID id.RoomID, sender id.UserID
 |---|---|
 | `OnMessage(handler)` | Register a message handler (can register multiple) |
 | `SendText(ctx, roomID, text)` | Send a plain text message |
-| `SendHTML(ctx, roomID, text, html)` | Send a message with HTML formatting |
-| `SendReply(ctx, roomID, text, html, ...userIDs)` | Send a formatted reply with user mentions |
-| `Client()` | Access the underlying mautrix client for advanced usage |
-| `Run(ctx)` | Start the bot (blocks until context is cancelled) |
-| `Stop()` | Gracefully stop the bot and close the database |
+| `SendHTML(ctx, roomID, text, html)` | Send with HTML formatting |
+| `SendReply(ctx, roomID, text, html, ...userIDs)` | Send formatted reply with mentions |
+| `Client()` | Access the underlying mautrix client |
+| `Run(ctx)` | Start the bot (blocks until context cancelled) |
+| `Stop()` | Gracefully stop and close database |
 
 ---
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|---|---|---|
-| `MATRIX_API_URL` | Yes | Matrix homeserver URL |
-| `MATRIX_API_USER` | Yes | Bot username (localpart) |
-| `MATRIX_API_PASS` | Yes | Bot password |
-| `MATRIX_DEBUG` | No | Set `true` for verbose logging |
-| `OPEN_WEB_API_GENERATE_URL` | No | Ollama API URL (for AI examples) |
-| `OPEN_WEB_API_TOKEN` | No | Ollama API token (for AI examples) |
+| Variable | Required | Service | Description |
+|---|---|---|---|
+| `MATRIX_API_URL` | Yes | Matrix | Homeserver URL |
+| `MATRIX_API_USER` | Yes | Matrix | Bot username |
+| `MATRIX_API_PASS` | Yes | Matrix | Bot password |
+| `MATRIX_DEBUG` | No | Matrix | `true` for verbose logs |
+| `OPEN_WEB_API_GENERATE_URL` | No | Ollama | API endpoint |
+| `OPEN_WEB_API_TOKEN` | No | Ollama | Bearer token |
+| `GITEA_URL` | No | Gitea | Instance URL |
+| `GITEA_TOKEN` | No | Gitea | API access token |
+| `GITEA_OWNER` | No | Gitea | Organization/owner |
+| `ONLYOFFICE_URL` | No | OnlyOffice | Instance URL |
+| `ONLYOFFICE_USER` | No | OnlyOffice | Login email |
+| `ONLYOFFICE_PASS` | No | OnlyOffice | Password |
 
 ## Examples
 
-| Example | Description | Run |
+| Example | Services | Description |
 |---|---|---|
-| [echobot](examples/echobot/) | Simple echo bot | `go run ./examples/echobot/` |
-| [ai-assistant](examples/ai-assistant/) | AI chat with Ollama | `go run ./examples/ai-assistant/` |
-| [commandbot](examples/commandbot/) | Multi-command bot with `!help`, `!ai`, `!code` | `go run ./examples/commandbot/` |
+| [echobot](examples/echobot/) | Matrix | Simple echo bot |
+| [ai-assistant](examples/ai-assistant/) | Matrix + Ollama | AI chat with `::` prefix |
+| [commandbot](examples/commandbot/) | Matrix + Ollama | Multi-command with `!help`, `!ai`, `!code` |
+| [project-manager](examples/project-manager/) | All four | Full PM bot: repos, issues, projects, tasks, AI summaries |
 
-## Related
+## Related Libraries
 
-- [go-ollama](https://github.com/eSlider/go-ollama) — Ollama/Open WebUI API client with streaming
-- [go-onlyoffice](https://github.com/eSlider/go-onlyoffice) — OnlyOffice Project Management API client
-- [go-gitea-helpers](https://github.com/eSlider/go-gitea-helpers) — Gitea API pagination helpers
+| Library | Description | Install |
+|---|---|---|
+| [go-ollama](https://github.com/eSlider/go-ollama) | Ollama/Open WebUI streaming client | `go get github.com/eslider/go-ollama` |
+| [go-onlyoffice](https://github.com/eSlider/go-onlyoffice) | OnlyOffice Project Management API | `go get github.com/eslider/go-onlyoffice` |
+| [go-gitea-helpers](https://github.com/eSlider/go-gitea-helpers) | Gitea pagination helpers | `go get github.com/eslider/go-gitea-helpers` |
 
 ## License
 

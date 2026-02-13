@@ -3,6 +3,7 @@ module github.com/eslider/go-matrix-bot
 go 1.24.0
 
 require (
+	github.com/eslider/go-ollama v0.1.0
 	github.com/gomarkdown/markdown v0.0.0-20250810172220-2e2c11897d1a
 	github.com/mattn/go-sqlite3 v1.14.34
 	github.com/rs/zerolog v1.34.0

@@ -1,5 +1,11 @@
 # go-matrix-bot
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/eslider/go-matrix-bot.svg)](https://pkg.go.dev/github.com/eslider/go-matrix-bot)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8.svg)](https://go.dev)
+[![Latest Release](https://img.shields.io/github/v/tag/eSlider/go-matrix-bot?sort=semver&label=release)](https://github.com/eSlider/go-matrix-bot/releases)
+[![GitHub Stars](https://img.shields.io/github/stars/eSlider/go-matrix-bot?style=social)](https://github.com/eSlider/go-matrix-bot/stargazers)
+
 Go library for building [Matrix](https://matrix.org/) bots with end-to-end encryption support, built on top of [mautrix-go](https://github.com/mautrix/go).
 
 Integrates with [go-ollama](https://github.com/eSlider/go-ollama), [go-onlyoffice](https://github.com/eSlider/go-onlyoffice), and [go-gitea-helpers](https://github.com/eSlider/go-gitea-helpers) for AI-powered project management in chat.

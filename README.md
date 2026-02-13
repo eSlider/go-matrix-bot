@@ -26,12 +26,18 @@ graph TB
         OO["📋 go-onlyoffice<br/>Projects & Tasks"]
     end
 
+    subgraph "AI Infrastructure"
+        OL["Ollama Server<br/>CUDA / SYCL / CPU"]
+    end
+
     U -->|"sends message"| R
     R -->|"event"| B
     B --> H
     H -->|"query"| AI
     H -->|"fetch/create"| GIT
     H -->|"fetch/create"| OO
+    AI -->|"POST /api/generate"| OL
+    OL -->|"streaming tokens"| AI
     AI -->|"AI response"| H
     GIT -->|"repos, issues"| H
     OO -->|"projects, tasks"| H
@@ -210,6 +216,48 @@ go get github.com/eslider/go-gitea-helpers      # Git issue tracking
 ```bash
 # Debian/Ubuntu
 sudo apt-get install libolm-dev
+```
+
+---
+
+## Running the AI Backend
+
+The bot's AI features (`!ai`, `!summarize`, `!review`) require an Ollama-compatible API. You can run Ollama anywhere the bot can reach it over HTTP.
+
+**Standard setup (NVIDIA / CPU):**
+
+```bash
+docker run -d -p 11434:11434 -v ollama-data:/root/.ollama ollama/ollama
+ollama pull llama3.2:3b
+```
+
+**Intel GPU acceleration (Arc / integrated):**
+
+If your server has an Intel GPU (Arc A770, Core Ultra iGPU, Data Center Flex/Max), you can get up to **2x faster inference** compared to Vulkan by using a [SYCL-accelerated Ollama build](https://github.com/eSlider/ollama-intel-gpu):
+
+```bash
+git clone https://github.com/eSlider/ollama-intel-gpu
+cd ollama-intel-gpu
+docker compose up
+```
+
+This builds Ollama with Intel oneAPI SYCL backend and bundles Open WebUI at `http://localhost:3000`. The bot connects to the same `http://localhost:11434` endpoint — no code changes needed.
+
+**Then point the bot at it:**
+
+```bash
+export OPEN_WEB_API_GENERATE_URL="http://localhost:11434/api/generate"
+export OPEN_WEB_API_TOKEN=""  # local Ollama needs no token
+```
+
+```mermaid
+graph LR
+    BOT["go-matrix-bot"] -->|"POST /api/generate"| OL["Ollama API<br/>:11434"]
+    OL --> GPU{"GPU Backend"}
+    GPU -->|"NVIDIA"| CUDA["CUDA"]
+    GPU -->|"Intel"| SYCL["SYCL<br/>(oneAPI)"]
+    GPU -->|"CPU"| CPU["llama.cpp<br/>CPU"]
+    SYCL -.->|"~2x vs Vulkan"| PERF["Arc A770: ~55 tok/s<br/>Core Ultra iGPU: ~16 tok/s"]
 ```
 
 ---
